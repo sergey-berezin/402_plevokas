@@ -1,4 +1,4 @@
-﻿using Microsoft.ML;
+using Microsoft.ML;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -14,25 +14,17 @@ using static Microsoft.ML.Transforms.Image.ImageResizingEstimator;
 
 namespace LabMainBlock
 {
-    public class Program1
+    public class ImageProcessing
     {
 
         const string modelPath = @"C:\Users\white\source\repos\Lab1\Lab1\yolov4.onnx";
 
-        public static ConcurrentQueue<Tuple<string, IReadOnlyList<YoloV4Result>>> yoloResults = new ConcurrentQueue<Tuple<string, IReadOnlyList<YoloV4Result>>>();
-
-        public static bool isEnded;
-
-        //const string imageFolder = @"Assets\Images";
-
         static readonly string[] classesNames = new string[] { "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" };
 
-        public static async Task MainBlock(string path)
+        public static async Task SuperImageProphet(string path, ConcurrentQueue<Tuple<string, IReadOnlyList<YoloV4Result>>> resultsYolo, CancellationToken ct)
         {
 
             MLContext mlContext = new MLContext();
-            isEnded = false;
-            // Define scoring pipeline
             var pipeline = mlContext.Transforms.ResizeImages(inputColumnName: "bitmap", outputColumnName: "input_1:0", imageWidth: 416, imageHeight: 416, resizing: ResizingKind.IsoPad)
                 .Append(mlContext.Transforms.ExtractPixels(outputColumnName: "input_1:0", scaleImage: 1f / 255f, interleavePixelColors: true))
                 .Append(mlContext.Transforms.ApplyOnnxModel(
@@ -54,17 +46,7 @@ namespace LabMainBlock
                         "Identity_2:0"
                     },
                     modelFile: modelPath, recursionLimit: 100));
-
-            // Fit on empty list to obtain input data schema
             var model = pipeline.Fit(mlContext.Data.LoadFromEnumerable(new List<YoloV4BitmapData>()));
-
-            // Create prediction engine
-
-            // save model
-            //mlContext.Model.Save(model, predictionEngine.OutputSchema, Path.ChangeExtension(modelPath, "zip"));
-            //var sw = new Stopwatch();
-
-            //string pathVariable = @"Assets\Images";
 
 
             DirectoryInfo dir = new DirectoryInfo(path);
@@ -76,23 +58,16 @@ namespace LabMainBlock
                 images.Add(f.Name);
             }
 
-            //sw.Start();
-            var cts = new CancellationTokenSource();
-            var ct = cts.Token;
-
-            // var ab = new TransformBlock<string, Tuple<string, IReadOnlyList<YoloV4Result>>>(async imageName =>
             var ab = new ActionBlock<string>(async imageName =>
             {
                 using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(path, imageName))))
                 {
                     IReadOnlyList<YoloV4Result> results;
-                    // predict
                     var predictionEngine = mlContext.Model.CreatePredictionEngine<YoloV4BitmapData, YoloV4Prediction>(model);
                     var predict = await AsyncGetPrediction(predictionEngine, bitmap);
                     results = predict.GetResults(classesNames, 0.3f, 0.7f);
                     Tuple<string, IReadOnlyList<YoloV4Result>> tuple = new Tuple<string, IReadOnlyList<YoloV4Result>>(imageName, results);
-                    yoloResults.Enqueue(tuple);
-                    //return tuple;
+                    resultsYolo.Enqueue(tuple);
                 }
             },
             new ExecutionDataflowBlockOptions
@@ -101,67 +76,20 @@ namespace LabMainBlock
                 CancellationToken = ct
             });
 
-
-            var th = new Thread(new ThreadStart(() => {
-                Console.WriteLine("Dear user, input 's' or 'S' to stop work\n");
-                string input = Console.ReadLine();
-                if ((input == "s") | (input == "S"))
-                {
-                    cts.Cancel();
-                }
-            }));
-            th.Start();
             Parallel.ForEach(images, imageName => ab.Post(imageName));
-
-            /*
-            for (int i = 0; i < files.Length; i++)
-            {
-                try
-                {
-                    var receivedData = ab.Receive();
-                    Console.WriteLine(receivedData.Item1);
-                    foreach (var obj in receivedData.Item2)
-                    {
-                        Console.WriteLine(obj.Label + " " + obj.BBox[0] + " " + obj.BBox[1] + " " + obj.BBox[2] + " " + obj.BBox[3]);
-                    }
-                    Console.WriteLine(" ");
-                }
-                catch (InvalidOperationException exception)
-                {
-                    Console.WriteLine("Process aborted inside for-cycle");
-                }
-                catch
-                {
-                    Console.WriteLine("Unexpected behaviour");
-                }
-            }
-            */
             ab.Complete();
+
             try
             {
                 await ab.Completion;
-                //sw.Stop();
-
-                //Console.WriteLine($"Done in {sw.ElapsedMilliseconds}ms.");
-                isEnded = true;
-
-                //Console.WriteLine("\nDear user, work finished, press enter to continue");
             }
-            catch (TaskCanceledException except)
+            catch (TaskCanceledException)
             {
                 Console.WriteLine("Abort successful");
-                //sw.Stop();
-                //Console.WriteLine($"Done in {sw.ElapsedMilliseconds}ms.");
-                isEnded = true;
-                //Console.WriteLine("\nDear user, work finished, press enter to continue");
             }
             catch
             {
                 Console.WriteLine("Unexpected behaviour");
-                //sw.Stop();
-                //Console.WriteLine($"Done in {sw.ElapsedMilliseconds}ms.");
-                isEnded = true;
-                //Console.WriteLine("\nDear user, work finished, press enter to continue");
             }
         }
         static async Task<YoloV4Prediction> AsyncGetPrediction(PredictionEngine<YoloV4BitmapData, YoloV4Prediction> predictionEngine, Bitmap bitmap)
