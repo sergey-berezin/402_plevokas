@@ -23,15 +23,15 @@ namespace Lab1MainBlock
             Tuple<string, IReadOnlyList<YoloV4Result>> result;
             string path_for_prog = @"Assets\Images";
 
-            var cancellationTask = Task.Run(() =>
+            var cancellationTask = Task.Factory.StartNew(() =>
             {
                 string cancel = Console.ReadLine();
                 if (cancel == "s" || cancel == "S")
                     cst.Cancel();
-            }
+            }, TaskCreationOptions.LongRunning
             );
             var task1 = ImageProcessing.SuperImageProphet(path_for_prog, yoloResults, ct);
-            var task2 = Task.Run(() =>
+            var task2 = Task.Task.Factory.StartNew(() =>
             {
                 while (true)
                 {
@@ -54,7 +54,7 @@ namespace Lab1MainBlock
                     }
                 }
 
-            });
+            }, TaskCreationOptions.LongRunning);
             await Task.WhenAll(task1);
         }
     }
