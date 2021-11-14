@@ -92,7 +92,6 @@ namespace ProphetUI
                 }
             });
 
-            await Task.WhenAll(prophetTask);
             isProcessing = false;
             ProcessingState = "Обработка закончена";
             yoloResults.Clear();
