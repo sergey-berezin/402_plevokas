@@ -85,7 +85,7 @@ namespace ProphetUI
                         var file_info = result.Item2;
                         foreach (var result_new in file_info)
                         {
-                            uiContext.Send(x => currDict.Add(new YoloImage(result_new, InputPath + @"\" + file_name)), null);
+                            uiContext.Post(x => currDict.Add(new YoloImage(result_new, InputPath + @"\" + file_name)), null);
                             Console.WriteLine(InputPath + file_name);
                         }
                     }
