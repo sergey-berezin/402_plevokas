@@ -70,20 +70,20 @@ namespace ProphetBack
             {
                 return;
             }
-            _ = DetectObjectsAsync();
+            _ = StartProcessing();
         }
 
-        private async Task DetectObjectsAsync()
+        private async Task StartProcessing()
         {
             processing = true;
             ProcessingState = "Обработка началась.";
             _ = ProphetImagePredictor.ExecuteAsync(inputPath, tokenSource.Token, finalResult);
-            await DetectionProcessingAsync(finalResult);
+            await DetectObjectsAsync(finalResult);
             processing = false;
             ProcessingState = "Обработка закончена.";
         }
 
-        private async Task DetectionProcessingAsync(ISourceBlock<IReadOnlyList<YoloResult>> dataSource)
+        private async Task DetectObjectsAsync(ISourceBlock<IReadOnlyList<YoloResult>> dataSource)
         {
             while (await dataSource.OutputAvailableAsync())
             {
@@ -93,6 +93,7 @@ namespace ProphetBack
                 {
                     await DBManager.AddAsync(new YoloItem(item));
                     await Task.Delay(1);
+                    // Тоже ускоряет
                 }
                 // Ускоряет производительность - еще с прошлой лабы
                 await Task.Delay(1);
